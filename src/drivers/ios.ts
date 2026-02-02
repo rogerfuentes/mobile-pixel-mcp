@@ -119,14 +119,8 @@ export class IOSDriver implements DeviceDriver {
     }
   }
 
-  private getIdbArgs(args: string[]): string[] {
-    // idb syntax: idb <command> [--udid <udid>] [args...]
-    // The --udid flag must come AFTER the subcommand
-    if (this.udid && args.length > 0) {
-      const [command, ...rest] = args;
-      return [command, '--udid', this.udid, ...rest];
-    }
-    return args;
+  private getUdidFlags(): string[] {
+    return this.udid ? ['--udid', this.udid] : [];
   }
 
   async getScreenshot(): Promise<Buffer> {
@@ -134,7 +128,7 @@ export class IOSDriver implements DeviceDriver {
       if (this.hasIdb) {
           const { stdout } = await execa(
             'idb',
-            this.getIdbArgs(['screenshot', '-']),
+            ['screenshot', ...this.getUdidFlags(), '-'],
             { encoding: 'buffer', stripFinalNewline: false }
           );
           return Buffer.from(stdout);
@@ -165,9 +159,10 @@ export class IOSDriver implements DeviceDriver {
       const pointX = Math.round(x / this.density);
       const pointY = Math.round(y / this.density);
       
+      // Correct Syntax: idb ui tap --udid <udid> X Y
       await execa(
         'idb',
-        this.getIdbArgs(['ui', 'tap', pointX.toString(), pointY.toString()])
+        ['ui', 'tap', ...this.getUdidFlags(), pointX.toString(), pointY.toString()]
       );
     } catch (error) {
        throw new DeviceActionError('Failed to tap', 'tap', error instanceof Error ? error : undefined);
@@ -183,13 +178,15 @@ export class IOSDriver implements DeviceDriver {
       const pX2 = Math.round(x2 / this.density);
       const pY2 = Math.round(y2 / this.density);
       
+      // Correct Syntax: idb ui swipe --udid <udid> X1 Y1 X2 Y2 ...
       await execa(
         'idb',
-        this.getIdbArgs([
+        [
           'ui', 'swipe', 
+          ...this.getUdidFlags(),
           pX1.toString(), pY1.toString(), pX2.toString(), pY2.toString(), 
           '--duration', durationSeconds.toString()
-        ])
+        ]
       );
     } catch (error) {
        throw new DeviceActionError('Failed to swipe', 'swipe', error instanceof Error ? error : undefined);
@@ -199,7 +196,8 @@ export class IOSDriver implements DeviceDriver {
   async inputText(text: string): Promise<void> {
     if (!this.hasIdb) throw new ToolNotAvailableError('idb', 'ios');
     try {
-      await execa('idb', this.getIdbArgs(['ui', 'text', text]));
+       // Correct Syntax: idb ui text --udid <udid> STRING
+      await execa('idb', ['ui', 'text', ...this.getUdidFlags(), text]);
     } catch (error) {
        throw new DeviceActionError('Failed to input text', 'input', error instanceof Error ? error : undefined);
     }
@@ -215,7 +213,8 @@ export class IOSDriver implements DeviceDriver {
 
     if (this.hasIdb) {
         try {
-          await execa('idb', this.getIdbArgs(['ui', 'button', 'HOME']));
+          // idb ui button --udid <udid> HOME
+          await execa('idb', ['ui', 'button', ...this.getUdidFlags(), 'HOME']);
           return;
         } catch (error) {
           throw new DeviceActionError('Failed to press home button', 'home', error instanceof Error ? error : undefined);
@@ -265,7 +264,8 @@ export class IOSDriver implements DeviceDriver {
   async installApp(path: string): Promise<void> {
     try {
       if (this.hasIdb) {
-          await execa('idb', this.getIdbArgs(['install', path]));
+          // idb install --udid <udid> PATH
+          await execa('idb', ['install', ...this.getUdidFlags(), path]);
       } else {
         const target = this.udid || 'booted';
         await execa('xcrun', ['simctl', 'install', target, path]);
@@ -282,7 +282,8 @@ export class IOSDriver implements DeviceDriver {
   async uninstallApp(appId: string): Promise<void> {
     try {
       if (this.hasIdb) {
-         await execa('idb', this.getIdbArgs(['uninstall', appId]));
+         // idb uninstall --udid <udid> APPID
+         await execa('idb', ['uninstall', ...this.getUdidFlags(), appId]);
       } else {
          const target = this.udid || 'booted';
          await execa('xcrun', ['simctl', 'uninstall', target, appId]);
