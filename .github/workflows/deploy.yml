@@ -36,6 +36,14 @@ jobs:
       - name: Run Tests
         run: npm test
 
+      # Trusted Publishing uses OIDC - clear tokens to avoid setup-node conflict
+      # Fixes: https://github.com/actions/setup-node/issues/1440
+      # Trusted Publishing uses OIDC - clear tokens to avoid setup-node conflict
+      # Fixes: https://github.com/actions/setup-node/issues/1440
+      - name: Publish to NPM
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: NODE_AUTH_TOKEN="" npm publish --access public --provenance
+
       - name: Extract Version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: echo "PACKAGE_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
@@ -49,12 +57,3 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Trusted Publishing uses OIDC - clear tokens to avoid setup-node conflict
-      # Fixes: https://github.com/actions/setup-node/issues/1440
-      - name: Publish to NPM
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ''
-          NPM_CONFIG_USERCONFIG: ''
