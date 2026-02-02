@@ -1,6 +1,6 @@
 {
   "name": "mobile-pixel-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "main": "dist/index.js",
   "description": "Visual-first MCP server for mobile automation",
@@ -37,7 +37,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "git+https://github.com/rogerfuentes/mobile-pixel-mcp.git"
   },
   "engines": {
     "node": ">=18.0.0"
