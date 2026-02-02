@@ -102,7 +102,7 @@ describe('IOSDriver', () => {
         await driver.tap(100, 200);
         expect(mockExeca).toHaveBeenCalledWith(
             'idb',
-            ['ui', '--udid', 'test-udid', 'tap', '100', '200']
+            ['ui', 'tap', '--udid', 'test-udid', '100', '200']
         );
     });
   });
