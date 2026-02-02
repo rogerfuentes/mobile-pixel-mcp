@@ -24,6 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
       - name: Install Dependencies
@@ -54,7 +55,4 @@ jobs:
       # See: https://github.com/actions/setup-node/issues/1440
       - name: Publish to NPM
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          unset NODE_AUTH_TOKEN
-          unset NPM_CONFIG_USERCONFIG
-          npm publish --access public --provenance
+        run: npm publish --access public --provenance
