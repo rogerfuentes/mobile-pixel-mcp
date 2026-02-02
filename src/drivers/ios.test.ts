@@ -32,9 +32,15 @@ describe('IOSDriver', () => {
     });
 
     it('should throw if no booted devices found', async () => {
+      // Mock idb list-targets (availability check)
       mockExeca.mockResolvedValueOnce({ stdout: 'ver' });
-      mockExeca.mockResolvedValueOnce({ 
-        stdout: JSON.stringify({ udid: 'shutdown-uuid', state: 'Shutdown' }) 
+      // Mock idb list-targets --json (detectDevice)
+      mockExeca.mockResolvedValueOnce({
+        stdout: JSON.stringify({ udid: 'shutdown-uuid', state: 'Shutdown' })
+      });
+      // Mock xcrun simctl list devices (detectDeviceXcrun fallback)
+      mockExeca.mockResolvedValueOnce({
+        stdout: JSON.stringify({ devices: { 'runtime': [{ state: 'Shutdown', udid: 'shutdown-uuid' }] } })
       });
 
       await expect(IOSDriver.create()).rejects.toThrow(DeviceConnectionError);

@@ -28,13 +28,19 @@ describe('ocr', () => {
   });
 
   it('should process image and return bounds if text found', async () => {
-    // Setup Tesseract result
+    // Setup Tesseract result with the structure: blocks[].paragraphs[].lines[].words[]
     mockWorker.recognize.mockResolvedValue({
       data: {
-        words: [
-          { text: 'Hello', bbox: { x0: 10, y0: 10, x1: 50, y1: 30 } },
-          { text: 'World', bbox: { x0: 60, y0: 10, x1: 100, y1: 30 } },
-        ],
+        blocks: [{
+          paragraphs: [{
+            lines: [{
+              words: [
+                { text: 'Hello', bbox: { x0: 10, y0: 10, x1: 50, y1: 30 } },
+                { text: 'World', bbox: { x0: 60, y0: 10, x1: 100, y1: 30 } },
+              ],
+            }],
+          }],
+        }],
       },
     });
 
@@ -46,7 +52,7 @@ describe('ocr', () => {
     // Note: can't easily verify chain strictly without better mocks, but the fact it ran without error suggests chain worked.
     
     // Verify Worker usage
-    expect(createWorker).toHaveBeenCalledWith('eng');
+    expect(createWorker).toHaveBeenCalledWith('eng', 1, {});
     expect(mockWorker.recognize).toHaveBeenCalledWith(Buffer.from('processed'));
     expect(mockWorker.terminate).toHaveBeenCalled();
 
@@ -57,9 +63,15 @@ describe('ocr', () => {
   it('should return null if text not found', async () => {
     mockWorker.recognize.mockResolvedValue({
       data: {
-        words: [
-          { text: 'Hello', bbox: { x0: 10, y0: 10, x1: 50, y1: 30 } },
-        ],
+        blocks: [{
+          paragraphs: [{
+            lines: [{
+              words: [
+                { text: 'Hello', bbox: { x0: 10, y0: 10, x1: 50, y1: 30 } },
+              ],
+            }],
+          }],
+        }],
       },
     });
 
