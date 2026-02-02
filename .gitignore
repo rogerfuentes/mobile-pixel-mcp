@@ -34,6 +34,11 @@ temp/
 e2e_artifacts/
 e2e_artifacts_android/
 *.png
+!src/**/__fixtures__/*.png
 
 # Tesseract Data (eng.traineddata)
 *.traineddata
+
+# Agent Artifacts
+.claude/
+agents.md

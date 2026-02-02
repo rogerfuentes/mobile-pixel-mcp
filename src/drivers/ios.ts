@@ -121,7 +121,7 @@ export class IOSDriver implements DeviceDriver {
 
   private getIdbArgs(args: string[]): string[] {
     if (this.udid) {
-      return [...args, '--udid', this.udid];
+      return ['--udid', this.udid, ...args];
     }
     return args;
   }
