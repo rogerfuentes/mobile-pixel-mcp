@@ -57,4 +57,5 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           unset NODE_AUTH_TOKEN
+          unset NPM_CONFIG_USERCONFIG
           npm publish --access public --provenance
