@@ -288,4 +288,49 @@ export class AndroidDriver implements DeviceDriver {
       return [];
     }
   }
+
+  async installApp(path: string): Promise<void> {
+    try {
+      await execa(
+        'adb',
+        this.getAdbArgs(['install', '-r', path]) // -r to reinstall if existing
+      );
+    } catch (error) {
+      throw new DeviceActionError(
+        `Failed to install app from ${path}`,
+        'install_app' as any,
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  async uninstallApp(appId: string): Promise<void> {
+    try {
+      await execa(
+        'adb',
+        this.getAdbArgs(['uninstall', appId])
+      );
+    } catch (error) {
+      throw new DeviceActionError(
+        `Failed to uninstall app ${appId}`,
+        'uninstall_app' as any,
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  async resetApp(appId: string): Promise<void> {
+    try {
+      await execa(
+        'adb',
+        this.getAdbArgs(['shell', 'pm', 'clear', appId])
+      );
+    } catch (error) {
+      throw new DeviceActionError(
+        `Failed to reset app ${appId}`,
+        'reset_app' as any,
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
 }

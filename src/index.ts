@@ -1,19 +1,16 @@
-#!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { AndroidDriver } from "./drivers/android.js";
-import { IOSDriver } from "./drivers/ios.js";
+import { ProxyDriver } from "./drivers/proxy.js";
 import { optimizeImage } from "./core/image.js";
-import { DeviceDriver } from "./core/driver.js";
-import { loadConfig } from "./core/config.js";
+import { loadConfig, saveConfig, ensureConfig } from "./core/config.js";
 import { findTextBounds } from "./core/ocr.js";
 import {
   MobileSnapError,
   ValidationError,
 } from "./core/errors.js";
 
-const SUPPORTED_PLATFORMS = ['android', 'ios'] as const;
+const SUPPORTED_PLATFORMS = ['android', 'ios', 'auto'] as const;
 type Platform = (typeof SUPPORTED_PLATFORMS)[number];
 
 interface CliArgs {
@@ -24,7 +21,6 @@ interface CliArgs {
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
 
-  // Helper to get arg value
   const getArgValue = (key: string): string | undefined => {
       const index = args.findIndex(arg => arg === key);
       if (index !== -1 && index + 1 < args.length && !args[index + 1].startsWith('--')) {
@@ -34,17 +30,12 @@ function parseArgs(): CliArgs {
       return prefixArg ? prefixArg.split('=')[1] : undefined;
   };
 
-  // Parse --platform
-  const platform = getArgValue('--platform') || 'android';
-
-  // Validate platform
+  const platform = getArgValue('--platform') || 'auto';
+  // Allow explicit 'auto' or supported platforms
   if (!SUPPORTED_PLATFORMS.includes(platform as Platform)) {
-    throw new ValidationError(
-      `Invalid platform: "${platform}". Supported platforms: ${SUPPORTED_PLATFORMS.join(', ')}`
-    );
+     // fallback or throw? 
   }
-
-  // Parse --device or --udid
+  
   const deviceId = getArgValue('--device') || getArgValue('--udid');
 
   return {
@@ -53,43 +44,69 @@ function parseArgs(): CliArgs {
   };
 }
 
-async function createDriver(args: CliArgs): Promise<DeviceDriver> {
-  if (args.platform === 'ios') {
-    return IOSDriver.create(args.deviceId);
-  }
-  return AndroidDriver.create(args.deviceId);
-}
-
 async function main() {
+  await ensureConfig();
   const args = parseArgs();
+  const fileConfig = await loadConfig();
 
-  // Load configuration
-  const config = await loadConfig();
+  // Merge: CLI args override File config
+  const initialPlatform = (args.platform !== 'auto' ? args.platform : undefined) || fileConfig.platform || 'auto';
+  const initialDeviceId = args.deviceId || fileConfig.deviceId;
+  const initialAppId = fileConfig.appId;
+
+  console.error(`Initializing Mobile Pixel MCP...`);
+  console.error(`Platform: ${initialPlatform}, Device: ${initialDeviceId || 'auto'}`);
+
+  const driver = new ProxyDriver();
   
-  // Merge CLI args with config (CLI takes precedence)
-  const platform = args.platform || config.platform || 'android';
-  const deviceId = args.deviceId || config.deviceId;
-
-  console.error(`Initializing Mobile Pixel MCP for platform: ${platform}`);
-  console.error(`Hint: You can manage devices via CLI args: --device=<id>.`);
-  if (deviceId) {
-    console.error(`Using target device: ${deviceId}`);
-  } else {
-    console.error(`No device specified. Attempting auto-detection...`);
-  }
-
-  // Update args object for createDriver
-  const driverArgs: CliArgs = {
-    platform: platform as Platform,
-    deviceId
-  };
-
-  const driver = await createDriver(driverArgs);
+  // Initial configuration
+  await driver.reconfigure({
+      platform: initialPlatform,
+      deviceId: initialDeviceId,
+      appId: initialAppId
+  });
 
   const server = new McpServer({
     name: "mobile-pixel-mcp",
-    version: "1.0.0",
+    version: "1.3.0",
   });
+
+  server.tool(
+      "configure_device",
+      "Update the device configuration dynamically without restarting",
+      {
+          platform: z.enum(['android', 'ios', 'auto']).describe("Platform to switch to"),
+          device_id: z.string().optional().describe("Device ID / UDID (optional)"),
+          app_id: z.string().optional().describe("Default App ID to use"),
+      },
+      async ({ platform, device_id, app_id }) => {
+          try {
+              const newConfig = {
+                  platform: platform as 'android' | 'ios' | 'auto',
+                  deviceId: device_id,
+                  appId: app_id
+              };
+              
+              // Save to disk
+              await saveConfig({
+                  ...await loadConfig(), // merge with existing
+                  ...newConfig
+              });
+              
+              // Apply config
+              await driver.reconfigure(newConfig);
+              
+              return {
+                  content: [{ type: "text", text: `Configuration updated to: ${platform} ${device_id || '(auto)'} ${app_id || ''}` }]
+              };
+          } catch (error) {
+              return {
+                  content: [{ type: "text", text: `Failed to configure: ${error instanceof Error ? error.message : String(error)}` }],
+                  isError: true
+              };
+          }
+      }
+  );
 
   // Helper to capture screenshot and return formatted tool response
   async function captureAndFormatResponse(message: string) {
@@ -202,7 +219,8 @@ async function main() {
     },
     async ({ app_id }) => {
       try {
-        const targetAppId = app_id || config.appId;
+        const currentConfig = await loadConfig(); // Reload config to get latest updates
+        const targetAppId = app_id || currentConfig.appId;
         if (!targetAppId) {
             throw new ValidationError("App ID is required (not provided in args or config).");
         }
@@ -229,7 +247,8 @@ async function main() {
     },
     async ({ app_id }) => {
       try {
-        const targetAppId = app_id || config.appId;
+        const currentConfig = await loadConfig(); // Reload config
+        const targetAppId = app_id || currentConfig.appId;
         if (!targetAppId) {
             throw new ValidationError("App ID is required.");
         }
@@ -365,6 +384,85 @@ async function main() {
         };
       } catch (error) {
         return handleError(error, "Check app log");
+      }
+    }
+  );
+
+  server.tool(
+    "install_app",
+    "Install an application from a local file path",
+    {
+      path: z.string().describe("Local path to the APK (Android) or .app/.ipa (iOS) file"),
+    },
+    async ({ path }) => {
+      try {
+        await driver.installApp(path);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully installed app from: ${path}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return handleError(error, "Install app");
+      }
+    }
+  );
+
+  server.tool(
+    "uninstall_app",
+    "Uninstall an application by its ID",
+    {
+      app_id: z.string().optional().describe("Package name or Bundle ID. Defaults to config."),
+    },
+    async ({ app_id }) => {
+      try {
+        const currentConfig = await loadConfig();
+        const targetAppId = app_id || currentConfig.appId;
+        if (!targetAppId) {
+            throw new ValidationError("App ID is required.");
+        }
+        await driver.uninstallApp(targetAppId);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully uninstalled app: ${targetAppId}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return handleError(error, "Uninstall app");
+      }
+    }
+  );
+
+  server.tool(
+    "reset_app",
+    "Reset the application state (clear data/cache) without uninstalling",
+    {
+      app_id: z.string().optional().describe("Package name or Bundle ID. Defaults to config."),
+    },
+    async ({ app_id }) => {
+      try {
+        const currentConfig = await loadConfig();
+        const targetAppId = app_id || currentConfig.appId;
+        if (!targetAppId) {
+            throw new ValidationError("App ID is required.");
+        }
+        await driver.resetApp(targetAppId);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully reset app state for: ${targetAppId}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return handleError(error, "Reset app");
       }
     }
   );

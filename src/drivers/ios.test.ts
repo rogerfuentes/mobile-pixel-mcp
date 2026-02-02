@@ -62,11 +62,11 @@ describe('IOSDriver', () => {
     it('getScreenshot should use correct idb args', async () => {
         mockExeca.mockResolvedValueOnce({ stdout: Buffer.alloc(10) });
         await driver.getScreenshot();
-        // IOSDriver: ['--udid', 'test-udid', 'screenshot', '-']
+        // IOSDriver: ['screenshot', '--udid', 'test-udid', '-']
         expect(mockExeca).toHaveBeenCalledWith(
             'idb',
-            ['--udid', 'test-udid', 'screenshot', '-'],
-            expect.objectContaining({ encoding: 'buffer' })
+            ['screenshot', '--udid', 'test-udid', '-'],
+            { encoding: 'buffer', stripFinalNewline: false }
         );
     });
 
@@ -102,7 +102,7 @@ describe('IOSDriver', () => {
         await driver.tap(100, 200);
         expect(mockExeca).toHaveBeenCalledWith(
             'idb',
-            ['--udid', 'test-udid', 'ui', 'tap', '100', '200']
+            ['ui', '--udid', 'test-udid', 'tap', '100', '200']
         );
     });
   });

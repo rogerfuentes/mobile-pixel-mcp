@@ -60,4 +60,22 @@ export interface DeviceDriver {
    * @returns Array of log lines or parsed JSON objects
    */
   getAppLogs(tag?: string): Promise<string[]>;
+
+  /**
+   * Installs an application from a local file path.
+   * @param path The local path to the APK (Android) or .app/.ipa (iOS) file.
+   */
+  installApp(path: string): Promise<void>;
+
+  /**
+   * Uninstalls an application by its ID.
+   * @param appId The package name (Android) or bundle ID (iOS).
+   */
+  uninstallApp(appId: string): Promise<void>;
+
+  /**
+   * Resets the application state (clears data/cache) without uninstalling.
+   * @param appId The package name (Android) or bundle ID (iOS).
+   */
+  resetApp(appId: string): Promise<void>;
 }

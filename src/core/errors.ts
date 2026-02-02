@@ -20,7 +20,7 @@ export class MobileSnapError extends Error {
 export class DeviceConnectionError extends MobileSnapError {
   constructor(
     message: string,
-    public readonly platform: 'android' | 'ios',
+    public readonly platform: 'android' | 'ios' | 'auto',
     public readonly deviceId?: string
   ) {
     super(message);

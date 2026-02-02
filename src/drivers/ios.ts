@@ -120,8 +120,11 @@ export class IOSDriver implements DeviceDriver {
   }
 
   private getIdbArgs(args: string[]): string[] {
-    if (this.udid) {
-      return ['--udid', this.udid, ...args];
+    // idb syntax: idb <command> [--udid <udid>] [args...]
+    // The --udid flag must come AFTER the subcommand
+    if (this.udid && args.length > 0) {
+      const [command, ...rest] = args;
+      return [command, '--udid', this.udid, ...rest];
     }
     return args;
   }
@@ -147,7 +150,7 @@ export class IOSDriver implements DeviceDriver {
       }
     } catch (error) {
       throw new DeviceActionError(
-        'Failed to capture screenshot.',
+        `Failed to capture screenshot: ${error instanceof Error ? error.message : String(error)}`,
         'screenshot',
         error instanceof Error ? error : undefined
       );
@@ -159,7 +162,6 @@ export class IOSDriver implements DeviceDriver {
   async tap(x: number, y: number): Promise<void> {
     if (!this.hasIdb) throw new ToolNotAvailableError('idb', 'ios');
     try {
-      // Scale pixels to points and round
       const pointX = Math.round(x / this.density);
       const pointY = Math.round(y / this.density);
       
@@ -168,7 +170,7 @@ export class IOSDriver implements DeviceDriver {
         this.getIdbArgs(['ui', 'tap', pointX.toString(), pointY.toString()])
       );
     } catch (error) {
-       // ...
+       throw new DeviceActionError('Failed to tap', 'tap', error instanceof Error ? error : undefined);
     }
   }
 
@@ -176,8 +178,6 @@ export class IOSDriver implements DeviceDriver {
     if (!this.hasIdb) throw new ToolNotAvailableError('idb', 'ios');
     try {
       const durationSeconds = durationMs / 1000;
-      
-      // Scale pixels to points and round
       const pX1 = Math.round(x1 / this.density);
       const pY1 = Math.round(y1 / this.density);
       const pX2 = Math.round(x2 / this.density);
@@ -192,7 +192,7 @@ export class IOSDriver implements DeviceDriver {
         ])
       );
     } catch (error) {
-      // ...
+       throw new DeviceActionError('Failed to swipe', 'swipe', error instanceof Error ? error : undefined);
     }
   }
   
@@ -206,28 +206,29 @@ export class IOSDriver implements DeviceDriver {
   }
 
   async home(): Promise<void> {
-    if (!this.hasIdb) {
-        // We can do home with xcrun!
-        const target = this.udid || 'booted';
-        try {
-            await execa('xcrun', ['simctl', 'ui', target, 'button', 'home']);
-            return;
-        } catch {
-          // Fallback to error if fails
-        }
-         throw new ToolNotAvailableError('idb', 'ios');
-    }
+    // Try xcrun first as it is reliable for home
     try {
-      await execa('idb', this.getIdbArgs(['ui', 'button', 'HOME']));
-    } catch (error) {
-      throw new DeviceActionError('Failed to press home button', 'home', error instanceof Error ? error : undefined);
+        const target = this.udid || 'booted';
+        await execa('xcrun', ['simctl', 'ui', target, 'button', 'home']);
+        return;
+    } catch {}
+
+    if (this.hasIdb) {
+        try {
+          await execa('idb', this.getIdbArgs(['ui', 'button', 'HOME']));
+          return;
+        } catch (error) {
+          throw new DeviceActionError('Failed to press home button', 'home', error instanceof Error ? error : undefined);
+        }
     }
+    throw new ToolNotAvailableError('idb', 'ios');
   }
 
   async isAppRunning(appId: string): Promise<boolean> {
-     // ... (Existing implementation using xcrun is fine)
      try {
         const target = this.udid || 'booted';
+        // ps aux shows host processes? Simulator processes are visible on host.
+        // Better: simctl spawn booted ps aux
         const { stdout } = await execa('xcrun', ['simctl', 'spawn', target, 'ps', 'aux']);
         return stdout.includes(appId);
     } catch {
@@ -236,7 +237,6 @@ export class IOSDriver implements DeviceDriver {
   }
 
   async launchApp(appId: string): Promise<void> {
-      // ... (Existing implementation using xcrun is fine)
      try {
        const target = this.udid || 'booted';
        await execa('xcrun', ['simctl', 'launch', target, appId]);
@@ -245,39 +245,78 @@ export class IOSDriver implements DeviceDriver {
      }
   }
 
-
   async getAppLogs(tag = '[SNAP_BRIDGE]'): Promise<string[]> {
-    // xcrun simctl spawn booted log show --predicate 'eventMessage contains "..."' --style json --last 1m
     try {
-        const target = this.udid || 'booted';
-        // Construct predicate: eventMessage contains "tag"
-        // Note: iOS log predicate syntax is powerful. 
-        const predicate = `eventMessage contains "${tag}"`;
-        
-        const { stdout } = await execa('xcrun', [
-            'simctl', 'spawn', target, 
-            'log', 'show', 
-            '--predicate', predicate,
-            '--style', 'json',
-            '--last', '1m'
-        ]);
+      const target = this.udid || 'booted';
+      // Use log show with predicate. 
+      const predicate = `message contains "${tag}"`;
+      
+      const { stdout } = await execa(
+        'xcrun',
+        ['simctl', 'spawn', target, 'log', 'show', '--last', '5m', '--predicate', predicate, '--style', 'compact']
+      );
 
-        // Output IS JSON, but it's an array of events.
-        // We need to parse it and extract the message.
-        // If stdout is empty or not json, handle gracefully.
-        try {
-            const data = JSON.parse(stdout);
-            // data is array of objects? usually { "traceID": ..., "eventMessage": ... }
-            if (Array.isArray(data)) {
-                return data.map(entry => entry.eventMessage).filter(msg => !!msg);
-            }
-            return []; // Unexpected structure
-        } catch {
-            // Fallback: maybe it returned text?
-            return stdout.split('\n').filter(l => l.includes(tag));
-        }
+      return stdout.split('\n').filter(line => line.trim().length > 0);
     } catch {
-        return [];
+       return [];
+    }
+  }
+
+  async installApp(path: string): Promise<void> {
+    try {
+      if (this.hasIdb) {
+          await execa('idb', this.getIdbArgs(['install', path]));
+      } else {
+        const target = this.udid || 'booted';
+        await execa('xcrun', ['simctl', 'install', target, path]);
+      }
+    } catch (error) {
+       throw new DeviceActionError(
+        `Failed to install app from ${path}`,
+        'install_app' as any,
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  async uninstallApp(appId: string): Promise<void> {
+    try {
+      if (this.hasIdb) {
+         await execa('idb', this.getIdbArgs(['uninstall', appId]));
+      } else {
+         const target = this.udid || 'booted';
+         await execa('xcrun', ['simctl', 'uninstall', target, appId]);
+      }
+    } catch (error) {
+      throw new DeviceActionError(
+        `Failed to uninstall app ${appId}`,
+        'uninstall_app' as any,
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  async resetApp(appId: string): Promise<void> {
+    try {
+       const target = this.udid || 'booted';
+       // Terminate first
+       try { await execa('xcrun', ['simctl', 'terminate', target, appId]); } catch {}
+
+       // Get Data Container
+       const { stdout: containerPath } = await execa('xcrun', ['simctl', 'get_app_container', target, appId, 'data']);
+       if (!containerPath || containerPath.trim() === '') {
+           throw new Error(`Could not find data container for ${appId}`);
+       }
+       
+       // Clear content using rm -rf
+       await execa('rm', ['-rf', ...[`${containerPath.trim()}/*`]], { shell: true });
+       
+    } catch (error) {
+      throw new DeviceActionError(
+        `Failed to reset app ${appId}`,
+        'reset_app' as any,
+        error instanceof Error ? error : undefined
+      );
     }
   }
 }

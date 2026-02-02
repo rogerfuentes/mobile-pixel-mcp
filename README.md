@@ -61,10 +61,19 @@ Start the server *after* ensuring your environment is ready:
 | `find_text` | Find text coordinates (OCR) | `text` |
 | `tap_text` | Find text and tap center (OCR) | `text` |
 | `check_app_log` | Tail recent app logs | `tag`, `filter_text` |
+| `configure_device` | Switch device/platform dynamically | `platform`, `device_id`, `app_id` |
+| `install_app` | Install app from local path | `path` |
+| `uninstall_app` | Uninstall app | `app_id` |
+| `reset_app` | Reset app data/state | `app_id` |
 
 ## Configuration
 
-You can configure defaults using a `mobile-pixel.config.json` file in the working directory where the server is running.
+The server supports persistent configuration to avoid specifying arguments on every restart. It looks for `mobile-pixel.config.json` in the current working directory. The server will **automatically create this file** with default settings if it doesn't exist.
+
+### Dynamic Switching
+You can use the `configure_device` tool to switch platforms (e.g., from Android to iOS) or target devices without restarting the MCP server. This updates the `mobile-pixel.config.json` file automatically.
+
+### Manual Configuration (mobile-pixel.config.json)
 
 ```json
 {
