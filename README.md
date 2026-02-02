@@ -13,7 +13,7 @@ Add this to your MCP client configuration (e.g., Claude Desktop, Cursor):
       "command": "npx",
       "args": [
         "-y",
-        "mobile-pixel-mcp@latest"
+        "@kelios/mobile-pixel-mcp@latest"
       ]
     }
   }
@@ -22,7 +22,7 @@ Add this to your MCP client configuration (e.g., Claude Desktop, Cursor):
 
 You can optionally pass arguments to specify a platform or device:
 ```json
-"args": ["-y", "mobile-pixel-mcp@latest", "--platform", "ios"]
+"args": ["-y", "@kelios/mobile-pixel-mcp@latest", "--platform", "ios"]
 ```
 
 ## Prerequisites
