@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Use npm environment for Trusted Publishing
+    environment: npm
     # Grant permissions to create releases and for NPM Trusted Publishing
     permissions:
       contents: write
