@@ -50,9 +50,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Only publish if this is a push to main (not a PR)
-      # Trusted Publishing uses OIDC - unset NODE_AUTH_TOKEN to force OIDC flow
-      # See: https://github.com/actions/setup-node/issues/1440
+      # Trusted Publishing uses OIDC - clear tokens to avoid setup-node conflict
+      # Fixes: https://github.com/actions/setup-node/issues/1440
       - name: Publish to NPM
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ''
+          NPM_CONFIG_USERCONFIG: ''

@@ -1,6 +1,6 @@
 {
   "name": "mobile-pixel-mcp",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "type": "module",
   "main": "dist/index.js",
   "description": "Visual-first MCP server for mobile automation",
